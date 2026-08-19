@@ -1,0 +1,113 @@
+name: Build H3 Anime I2V PDF
+
+on:
+  push:
+    paths:
+      - 'docs/MiniMax_H3_Anime_I2V_Working_Guide_2026-08-20.md'
+      - '.github/workflows/build-h3-pdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install reportlab
+        run: python -m pip install reportlab
+
+      - name: Build PDF
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from reportlab.lib.pagesizes import A4
+          from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+          from reportlab.lib.enums import TA_CENTER
+          from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+          from reportlab.pdfbase import pdfmetrics
+          from reportlab.pdfbase.ttfonts import TTFont
+          from reportlab.lib.units import mm
+          from reportlab.lib import colors
+
+          src = Path('docs/MiniMax_H3_Anime_I2V_Working_Guide_2026-08-20.md').read_text(encoding='utf-8')
+          out = Path('docs/MiniMax_H3_Anime_I2V_Working_Guide_2026-08-20.pdf')
+
+          font = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+          bold = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          pdfmetrics.registerFont(TTFont('Guide', font))
+          pdfmetrics.registerFont(TTFont('GuideBold', bold))
+
+          styles = getSampleStyleSheet()
+          styles.add(ParagraphStyle(name='H1G', fontName='GuideBold', fontSize=17, leading=21, spaceBefore=9, spaceAfter=7, textColor=colors.HexColor('#202020')))
+          styles.add(ParagraphStyle(name='H2G', fontName='GuideBold', fontSize=12, leading=15, spaceBefore=7, spaceAfter=5, textColor=colors.HexColor('#333333')))
+          styles.add(ParagraphStyle(name='BG', fontName='Guide', fontSize=9.2, leading=13, spaceAfter=5, textColor=colors.HexColor('#303030')))
+          styles.add(ParagraphStyle(name='CG', fontName='Guide', fontSize=8, leading=11, backColor=colors.HexColor('#F3F3F3'), borderPadding=6, spaceAfter=6))
+          styles.add(ParagraphStyle(name='TG', fontName='GuideBold', fontSize=22, leading=27, alignment=TA_CENTER, spaceAfter=12))
+          styles.add(ParagraphStyle(name='SG', fontName='Guide', fontSize=9.5, leading=14, alignment=TA_CENTER, textColor=colors.HexColor('#555555')))
+
+          def esc(s):
+              return s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+
+          story = []
+          in_code = False
+          code_lines = []
+          first = True
+          for line in src.splitlines():
+              if line.strip().startswith('```'):
+                  if in_code:
+                      story.append(Paragraph('<br/>'.join(esc(x) for x in code_lines), styles['CG']))
+                      code_lines = []
+                  in_code = not in_code
+                  continue
+              if in_code:
+                  code_lines.append(line)
+                  continue
+              if not line.strip():
+                  story.append(Spacer(1, 2*mm))
+                  continue
+              if line.startswith('# '):
+                  if first:
+                      story.append(Spacer(1, 25*mm))
+                      story.append(Paragraph(esc(line[2:]), styles['TG']))
+                      first = False
+                  else:
+                      story.append(Paragraph(esc(line[2:]), styles['H1G']))
+              elif line.startswith('## '):
+                  story.append(Paragraph(esc(line[3:]), styles['H2G']))
+              elif line.startswith('|'):
+                  # Keep markdown tables readable as monospaced-ish lines; source remains authoritative.
+                  story.append(Paragraph(esc(line), styles['CG']))
+              elif line.startswith('- '):
+                  story.append(Paragraph('• ' + esc(line[2:]), styles['BG']))
+              elif line[:2].isdigit() and '. ' in line[:5]:
+                  story.append(Paragraph(esc(line), styles['BG']))
+              else:
+                  # Basic inline markdown cleanup
+                  txt = line.replace('**','').replace('`','')
+                  story.append(Paragraph(esc(txt), styles['BG']))
+
+          doc = SimpleDocTemplate(str(out), pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=16*mm, title='MiniMax H3 / Anime I2V Working Guide')
+          def footer(canvas, doc):
+              canvas.saveState(); canvas.setFont('Guide', 7); canvas.setFillColor(colors.HexColor('#777777'))
+              canvas.drawString(15*mm, 9*mm, 'MiniMax H3 / Anime I2V — Working Guide — 20 Aug 2026')
+              canvas.drawRightString(195*mm, 9*mm, str(doc.page)); canvas.restoreState()
+          doc.build(story, onFirstPage=footer, onLaterPages=footer)
+          print(f'Built {out}')
+          PY
+
+      - name: Commit generated PDF
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/MiniMax_H3_Anime_I2V_Working_Guide_2026-08-20.pdf
+          git diff --cached --quiet || git commit -m 'Build H3 anime I2V PDF'
+          git push

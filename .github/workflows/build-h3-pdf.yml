@@ -11,6 +11,7 @@ on:
       - '04-Workflow.md'
       - '05-Эксперименты.md'
       - '06-Тестирование.md'
+      - '07-Сверка_чатов.md'
       - '.github/workflows/build-h3-pdf.yml'
   workflow_dispatch:
 
@@ -33,6 +34,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
           files = [
               'README.md',
               '01-База.md',
@@ -41,6 +43,7 @@ jobs:
               '04-Workflow.md',
               '05-Эксперименты.md',
               '06-Тестирование.md',
+              '07-Сверка_чатов.md',
           ]
           out = Path('MiniMax_H3_ComfyUI_Full_Guide.md')
           parts = []
@@ -49,8 +52,6 @@ jobs:
               if not p.exists():
                   raise SystemExit(f'Missing guide file: {f}')
               text = p.read_text(encoding='utf-8')
-              # Remove internal web-citation markers that are useful in chat but not in a PDF.
-              import re
               text = re.sub(r'(?:cite|filecite)[^]*', '', text)
               parts.append(text.strip())
           out.write_text('\n\n\\newpage\n\n'.join(parts) + '\n', encoding='utf-8')

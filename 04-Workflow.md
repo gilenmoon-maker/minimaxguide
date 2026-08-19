@@ -1,28 +1,26 @@
-# 04 — Workflow: I2V, T2V и Ref2VA
+# 04 — Workflow: I2V, T2V, First/Last Frame и Ref2VA
 
-## 1. Какой режим использовать
+## 1. Выбор режима
 
-| Режим | Вход | Контроль персонажа | Для VN |
+| Режим | Что даём | Контроль персонажа | Приоритет |
 |---|---|---|---|
-| T2VA | текст | низкий | эксперимент |
-| I2V / FL2VA | картинка + текст | высокий | **основной** |
-| First + Last Frame | 2 кадра + текст | очень высокий по началу/концу | очень интересен |
-| Ref2VA | изображения/видео/аудио + текст | высокий/очень высокий | **важен для персонажей** |
+| T2VA | текст | низкий | 4 |
+| I2V / FL2VA | картинка + текст | высокий | **1** |
+| First + Last Frame | 2 картинки + текст | очень высокий для начала/конца | **2** |
+| Ref2VA | изображения/видео/аудио + текст | высокий/очень высокий | **3** |
 
-Официальные шаблоны Comfy-Org предоставляют отдельные I2V, T2V и R2V JSON. citeturn0search0turn0search1turn0search2
+Официальные workflow: I2V, T2V и R2V. citeturn0search0turn0search1turn0search2
 
 ---
 
-# 2. I2V — наш основной pipeline
-
-Схема:
+# 2. I2V — основной pipeline
 
 ```text
 3D Render
    ↓
 Load Image
    ↓
-MiniMax H3 FL2VA
+H3 FL2VA
    ↑
 Qwen H3 Encoder
    ↑
@@ -35,172 +33,173 @@ Video VAE + Audio VAE
 MP4
 ```
 
-Официальный I2V workflow уже содержит эту логику и использует `minimax_h3_fl2va_pruned_int8_convrot.safetensors`. citeturn0search0
+Для VN это основной путь, потому что персонаж уже создан в 3D.
 
 ---
 
-# 3. Как писать prompt для I2V
+# 3. Как подготовить исходный render
 
-Не нужно писать роман.
+Лучший стартовый render:
 
-Лучше описывать:
+- финальное лицо уже готово;
+- глаза хорошо видны;
+- нет сильного motion blur;
+- нет экстремально мелких деталей;
+- персонаж занимает разумную часть кадра;
+- освещение стабильное;
+- фон не перегружен.
 
-1. кто в кадре;
-2. где находится;
-3. что делает;
-4. как движется камера;
-5. какие мелкие движения происходят;
-6. что происходит со звуком.
+Не начинай с групповой сцены.
 
-### Шаблон
+---
+
+# 4. Prompt для I2V
+
+Структура:
 
 ```text
 [SHOT]
 Cinematic medium shot of [subject] in [location].
 
 [ACTION]
-The subject slowly [main movement].
+The subject slowly [one main action].
 
 [CAMERA]
-The camera [camera movement].
+The camera [one camera movement].
 
 [SECONDARY MOTION]
 Hair and clothing move subtly and naturally.
 
 [AUDIO]
-Quiet room ambience, subtle fabric movement, soft environmental sound.
+Describe simple environmental sound.
 ```
+
+Главное правило первого теста:
+
+> **одно главное действие + одно движение камеры.**
 
 ---
 
-# 4. Пример для 3D Visual Novel
+# 5. Хороший первый пример
 
 ```text
 Cinematic medium shot of a woman standing in an elegant modern bedroom at night.
-She slowly turns her head toward the camera and gives a subtle natural smile.
-Her hair moves slightly as she turns.
+She slowly turns her head toward the camera.
+Her hair and clothing move subtly and naturally.
 The camera performs a very slow cinematic push-in.
 Warm practical lighting with a soft cool rim light from the window.
-Quiet bedroom ambience, subtle fabric movement and distant city noise.
+Quiet bedroom ambience and subtle fabric movement.
 ```
-
-Для первого теста намеренно используем **одно главное действие**.
 
 ---
 
-# 5. First Frame
+# 6. Почему не надо писать слишком длинный prompt
 
-First Frame задаёт стартовую картинку.
+Слишком много требований одновременно увеличивает вероятность конфликтов.
 
-Использование:
+Плохой первый тест:
 
 ```text
-Render
- ↓
-First Frame
- ↓
-H3
- ↓
-движение
+turns + walks + sits + touches hair + changes expression + camera orbit + zoom + lighting change + rain + wind
 ```
 
-Это наиболее естественный способ анимировать уже готовый рендер.
-
----
-
-# 6. Last Frame
-
-Last Frame задаёт желаемый конечный кадр.
-
-Можно использовать:
+Хороший:
 
 ```text
-First Frame
-      +
-Last Frame
-      ↓
-    H3
-      ↓
-движение между ними
+slowly turns her head toward the camera
++ slow camera push-in
 ```
 
-Это интересно для сцен, где важно получить определённую позу или композицию в конце.
+После стабильного результата усложняем.
 
 ---
 
-# 7. First + Last Frame
+# 7. First Frame
 
-Это один из самых интересных режимов для VN.
+First Frame задаёт стартовое состояние.
+
+Для VN:
+
+`готовый 3D render → First Frame → движение`.
+
+Это наш базовый production-подход.
+
+---
+
+# 8. Last Frame
+
+Last Frame задаёт желаемый финал.
 
 Например:
 
-**Кадр 1:** персонаж стоит у окна.
+```text
+Frame A: персонаж стоит
+Frame B: персонаж уже сидит
+```
 
-**Кадр 2:** персонаж уже сидит на кровати.
+H3 строит переход.
 
-H3 должна построить переход.
-
-Не стоит начинать с очень большого изменения. Сначала проверяем простые переходы.
+Начинаем с небольшого различия между кадрами. Большой скачок позы может быть сложнее.
 
 ---
 
-# 8. T2VA
+# 9. First + Last Frame
 
-T2VA:
+Очень интересный режим для VN.
+
+Используем, когда хотим получить не случайное движение, а переход между двумя заранее подготовленными состояниями.
+
+---
+
+# 10. T2VA
 
 ```text
 Prompt
  ↓
-H3
+H3 FL2VA
  ↓
 Video + Audio
 ```
 
-Официальный T2V workflow использует тот же FL2VA diffusion checkpoint и H3 Qwen encoder. Если изображения не подключены, I2V workflow также может работать как text-to-video. citeturn0search0turn0search2
+Без изображения FL2VA workflow может использоваться как text-to-video/text-to-audio. citeturn0search0
 
 T2V полезен для:
 
-- тестирования H3;
-- фонов;
 - establishing shots;
-- природы;
 - интерьеров;
-- сцен, где персонаж не должен быть строго идентичен исходному render.
+- природы;
+- фонов;
+- второстепенных кадров.
+
+Для постоянных персонажей предпочитаем I2V/Ref2VA.
 
 ---
 
-# 9. Ref2VA
+# 11. Ref2VA
 
-Ref2VA интереснее, когда нужно использовать несколько источников.
+Ref2VA — отдельный checkpoint и отдельный workflow.
 
-Официальный workflow позволяет подключать до:
+Актуальная документация позволяет использовать несколько типов референсов. В workflow описаны изображения, видео и отдельные аудиореференсы. citeturn0search1
 
-- 9 reference images;
-- 3 reference videos;
-- 3 standalone audio clips.
-
-Можно использовать референсы для персонажа, стиля, движения, камеры или голоса. citeturn0search1
-
----
-
-# 10. Как мыслить о Ref2VA
-
-Например:
+### Пример логики
 
 ```text
-Picture 1 = персонаж
-Picture 2 = одежда
-Picture 3 = интерьер
-Video 1 = движение камеры
-Audio 1 = голос
-
-             ↓
-          Ref2VA
-             ↓
-         новый shot
+Image 1 = identity
+Image 2 = clothing
+Image 3 = environment
+Video 1 = motion/camera reference
+Audio 1 = voice/sound reference
+                 ↓
+              Ref2VA
+                 ↓
+              new shot
 ```
 
-В prompt нужно явно указывать, какой референс за что отвечает.
+---
+
+# 12. Роли референсов
+
+В prompt явно описывай роль каждого reference.
 
 Пример:
 
@@ -211,152 +210,158 @@ Use <Picture 3> as the environment reference.
 Create a cinematic medium shot of the character slowly turning toward the camera.
 ```
 
-Официальная документация workflow подчёркивает, что точные теги референсов и явное описание их роли особенно важны. citeturn0search1
+Не заставляй модель угадывать, зачем ты дал картинку.
 
 ---
 
-# 11. ref_image_size
+# 13. ref_image_size
 
-В Ref2VA есть концепция размера референса.
+Если конкретный Ref2VA workflow предлагает:
 
-`match` — уменьшает референс до размера генерации и работает быстрее.
+`match` — начинаем с него на 8 GB.
 
-`max` — позволяет сохранить до 2048 px по короткой стороне, потенциально лучше для идентичности, но дороже по скорости, потому что reference tokens участвуют в каждом sampling step. citeturn0search1
+`max` — тестируем потом, если нужна дополнительная детализация/идентичность.
 
-На 8 GB начинаем с:
-
-**match**
-
-Потом сравниваем с:
-
-**max**
+В документации Ref2VA больший reference size может увеличить вычислительную стоимость. citeturn0search1
 
 ---
 
-# 12. Sampler
+# 14. Sampler / Scheduler
 
-В официальном Ref2VA workflow используется `res_multistep`.
+Не переносим настройки одного workflow в другой.
 
-Для reference-heavy prompts там отмечено, что `beta` или `normal` scheduler обычно лучше `simple`. citeturn0search1
+Сначала оставляем sampler/scheduler из официального шаблона.
 
-Не переносим это автоматически на каждый другой workflow. Сначала используем настройки официального шаблона.
+В Ref2VA документация отдельно отмечает `res_multistep` и предпочтение `beta`/`normal` scheduler для некоторых reference-heavy prompts. citeturn0search1
 
 ---
 
-# 13. Аудио
+# 15. Аудио
 
-H3 создаёт видео и аудио совместно.
+H3 — видео+аудио модель.
 
-Официальный workflow декодирует видео и аудио из общего packed latent и затем объединяет их в видеофайл. citeturn0search1
-
-Это значит, что prompt должен учитывать не только изображение.
-
-Можно явно писать:
+Поэтому prompt может содержать звук:
 
 ```text
-quiet room ambience
+quiet bedroom ambience
 soft fabric movement
+distant city noise
 subtle footsteps
-city ambience outside the window
 ```
 
----
-
-# 14. Разрешение
-
-Официальный I2V/T2V шаблон использует native canvas с короткой стороной около 768 px и ограничением 768×1344, с округлением к размеру, кратному 32. citeturn0search0turn0search2
-
-На нашей 3070 Ti не надо сразу пытаться максимизировать размер.
-
-Первый тест — минимально разумный размер, который предлагает сам workflow.
-
-После успешного запуска увеличиваем разрешение.
+Не обязательно добавлять звук в каждый prompt, но для production-клипов лучше сразу учитывать audio design.
 
 ---
 
-# 15. Длительность
+# 16. Разрешение
 
-H3 работает с дискретной сеткой кадров. Официальный workflow преобразует секунды в допустимый `length` и округляет до сетки 17 кадров на блок. citeturn0search0
+Официальные workflow задают свои допустимые размеры и сетку. Не надо вручную вводить произвольное разрешение, если workflow его округляет.
 
-Поэтому не удивляйся, если введённые 5 секунд будут преобразованы в немного другое количество кадров.
+На 3070 Ti:
+
+1. стартовый размер из workflow;
+2. проверить VRAM;
+3. затем поднять разрешение;
+4. потом отдельно увеличить длительность.
 
 ---
 
-# 16. Настройки не должны быть одинаковыми для всех моделей
+# 17. Длительность
+
+H3 работает с допустимой сеткой кадров, поэтому введённые секунды могут преобразовываться workflow в ближайшее допустимое число кадров.
+
+Не пугайся небольшого расхождения между введённой длительностью и фактическим числом кадров.
+
+---
+
+# 18. Настройки каждой quant разные
 
 Это принципиально.
 
-Например:
-
 ```text
-INT8
-→ одна конфигурация
-
-INT4
-→ другая
-
-GGUF Q4
-→ другой loader и настройки
-
-W4A8
-→ отдельный backend
+Official INT8 → официальный loader/settings
+INT4 → настройки конкретного INT4
+GGUF Q4 → GGUF loader/settings
+W4A8 → W4A8 loader/settings
+SVDQuant → SVDQuant loader/settings
 ```
 
-Мы будем хранить настройки каждого варианта отдельно.
+Нельзя сделать один универсальный preset и считать его оптимальным для всех.
 
 ---
 
-# 17. Наш первый production-пайплайн
-
-Когда baseline будет работать:
+# 19. Production workflow №1 — персонаж
 
 ```text
 3D render
-   ↓
+ ↓
 I2V / FL2VA
-   ↓
-4–8 sec shot
-   ↓
+ ↓
+4–8 sec
+ ↓
 24 fps
-   ↓
-H3 native audio
-   ↓
+ ↓
+H3 audio
+ ↓
 MP4
 ```
 
-После этого можно строить библиотеку сцен для VN.
-
 ---
 
-# 18. Второй production-пайплайн
-
-Для сцен, где важнее идентичность:
+# 20. Production workflow №2 — identity-heavy
 
 ```text
-Character reference
-       +
-Environment reference
-       +
-Optional motion reference
-       ↓
-     Ref2VA
-       ↓
-   Video + Audio
+Character references
+        +
+Environment references
+        +
+Optional motion/video
+        ↓
+      Ref2VA
+        ↓
+    Video + Audio
 ```
 
 ---
 
-# 19. Не пытаться решить всё одним workflow
-
-Для реального проекта будет лучше иметь несколько preset-файлов:
+# 21. Production workflow №3 — переход
 
 ```text
-VN_I2V_CHARACTER.json
-VN_I2V_CAMERA.json
+First Frame
+     +
+Last Frame
+     ↓
+   FL2VA
+     ↓
+transition shot
+```
+
+---
+
+# 22. Production workflow №4 — фон
+
+```text
+Text
+ ↓
+T2VA
+ ↓
+background / establishing shot
+```
+
+---
+
+# 23. Рекомендуемая библиотека preset
+
+После тестов сохраняем:
+
+```text
+VN_I2V_FAST.json
+VN_I2V_BALANCED.json
+VN_I2V_QUALITY.json
 VN_FIRST_LAST_FRAME.json
 VN_REF2VA_CHARACTER.json
 VN_REF2VA_SCENE.json
-VN_T2V_BACKGROUND.json
+VN_T2VA_BACKGROUND.json
 ```
 
-После тестирования их можно сохранить в отдельную папку проекта.
+В каждом preset записываем H3/Qwen/commit и дату.

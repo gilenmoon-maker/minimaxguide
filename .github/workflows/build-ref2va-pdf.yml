@@ -1,0 +1,98 @@
+name: Build REF2VA PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'MiniMax_H3_REF2VA_guide_Gilen.md'
+      - '.github/workflows/build-ref2va-pdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PDF dependencies
+        run: |
+          python -m pip install --upgrade pip reportlab
+
+      - name: Build PDF
+        run: |
+          python - <<'PY'
+          from reportlab.lib.pagesizes import A4
+          from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted
+          from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+          from reportlab.pdfbase import pdfmetrics
+          from reportlab.pdfbase.ttfonts import TTFont
+          from reportlab.lib.enums import TA_CENTER
+          from reportlab.lib.units import mm
+          import os, re
+
+          out='MiniMax_H3_REF2VA_guide_Gilen.pdf'
+          font='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+          bold='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          pdfmetrics.registerFont(TTFont('DejaVu', font))
+          pdfmetrics.registerFont(TTFont('DejaVu-Bold', bold))
+          styles=getSampleStyleSheet()
+          styles.add(ParagraphStyle(name='RU_TITLE', fontName='DejaVu-Bold', fontSize=18, leading=22, alignment=TA_CENTER, spaceAfter=10))
+          styles.add(ParagraphStyle(name='RU_H1', fontName='DejaVu-Bold', fontSize=13, leading=17, spaceBefore=10, spaceAfter=5))
+          styles.add(ParagraphStyle(name='RU_BODY', fontName='DejaVu', fontSize=8.6, leading=12, spaceAfter=4))
+          styles.add(ParagraphStyle(name='RU_CODE', fontName='DejaVu', fontSize=7, leading=9, backColor='#F2F2F2', borderPadding=5, spaceAfter=6))
+
+          def inline(s):
+              s=s.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+              s=re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', s)
+              s=re.sub(r'`(.+?)`', r'<font name="DejaVu-Bold">\1</font>', s)
+              return s
+
+          story=[]
+          lines=open('MiniMax_H3_REF2VA_guide_Gilen.md',encoding='utf-8').read().splitlines()
+          in_code=False
+          code=[]
+          for line in lines:
+              if line.strip()=='```':
+                  if in_code:
+                      story.append(Preformatted('\n'.join(code), styles['RU_CODE']))
+                      code=[]
+                  in_code=not in_code
+                  continue
+              if in_code:
+                  code.append(line); continue
+              if not line.strip():
+                  continue
+              if line.startswith('# '):
+                  story.append(Paragraph(inline(line[2:]), styles['RU_TITLE']))
+              elif line.startswith('## '):
+                  story.append(Paragraph(inline(line[3:]), styles['RU_H1']))
+              elif line.startswith('### '):
+                  story.append(Paragraph(inline(line[4:]), styles['RU_H1']))
+              elif line.startswith('- '):
+                  story.append(Paragraph('• '+inline(line[2:]), styles['RU_BODY']))
+              elif re.match(r'^\d+\. ', line):
+                  story.append(Paragraph(inline(line), styles['RU_BODY']))
+              elif line.startswith('|'):
+                  story.append(Paragraph(inline(line), styles['RU_BODY']))
+              elif line.startswith('> '):
+                  story.append(Paragraph('<b>'+inline(line[2:])+'</b>', styles['RU_BODY']))
+              else:
+                  story.append(Paragraph(inline(line), styles['RU_BODY']))
+          doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=16*mm,leftMargin=16*mm,topMargin=15*mm,bottomMargin=15*mm,title='MiniMax H3 REF2VA — практический ориентир')
+          doc.build(story)
+          PY
+
+      - name: Publish GitHub release with PDF
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ref2va-guide --repo gilenmoon-maker/minimaxguide --yes || true
+          git push origin --delete ref2va-guide || true
+          gh release create ref2va-guide MiniMax_H3_REF2VA_guide_Gilen.pdf \
+            --repo gilenmoon-maker/minimaxguide \
+            --title 'MiniMax H3 REF2VA Guide' \
+            --notes 'Практический PDF-ориентир по MiniMax H3 REF2VA, Civitai ролик 139970013 и запуску на RTX 3070 Ti 8 GB + 64 GB RAM.'

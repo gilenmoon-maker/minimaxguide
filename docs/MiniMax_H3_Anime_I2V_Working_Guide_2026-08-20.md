@@ -1,255 +1,165 @@
-# MiniMax H3 / Anime I2V — Working Guide
+# MiniMax H3 REF2VA — практический ориентир
 
-**Актуальность:** 20 августа 2026
+**Для ComfyUI, reference-to-video и запуска на RTX 3070 Ti 8 GB + 64 GB RAM**
 
-**Задача:** локальный Anime / 2D Image-to-Video pipeline в ComfyUI.
+## 1. Что установлено точно
 
-**Железо:** RTX 3070 Ti 8 GB VRAM + 64 GB RAM.
+- Источник: Civitai image/video ID **139970013**.
+- Тип: **Video**.
+- Опубликованный размер: **1920 × 2944**.
+- Дата создания: **17 августа 2026**.
+- Base model в metadata: **MiniMax H3**.
+- Model version IDs: не указаны.
+- Используются **Picture 1, Picture 2, Picture 3**.
+- Prompt построен как reference-driven video generation.
+- Sampler, scheduler, CFG, steps и seed в metadata не указаны.
 
-## 1. Главный вывод
+## 2. Архитектура prompt
 
-Главный кандидат для твоего проекта — **MiniMax H3 Ref2VA**. Это не утверждение, что H3 гарантированно лучше всех конкурентов: честного публичного benchmark-а на одинаковых anime-кадрах против DaSiWa/Wan 2.2 я не нашёл. Поэтому H3 ставится первым в A/B-тест, а не объявляется безусловным победителем.
+Prompt разделён на шесть смысловых блоков:
 
-### Приоритет тестов
+1. `subject_definitions`
+2. `summary`
+3. `retention_analysis`
+4. `detailed_description`
+5. `overall_soundscape`
+6. `non_diegetic_music`
 
-1. **H3 Ref2VA INT4** — основной кандидат для 8 GB.
-2. **H3 Ref2VA W4 / ConvRot / CPU offload** — fallback при проблемах с VRAM.
-3. **H3 Ref2VA INT8** — контроль качества.
-4. **H3 FL2VA INT4** — controlled transition / first-last frame.
-5. **H3 Ref2VA + актуальный Turbo LoRA** — speed test.
-6. **H3 FL2VA + Turbo** — быстрый альтернативный режим.
-7. **DaSiWa / Wan 2.2 I2V** — главный внешний контроль.
-8. **HunyuanVideo 1.5** — резервный более лёгкий baseline.
+Главная идея — создать переменную `<Subject 1>` и привязать к ней несколько референсов.
 
-## 2. Что именно сравнивать у H3
+### 2.1 Три референса
 
-Не путать название модели с конкретным workflow.
+| Референс | Роль | Что закрепляет |
+|---|---|---|
+| Picture 1 | Основной character reference | Внешность, одежда, волосы, лицо, пропорции и общий дизайн |
+| Picture 2 | Body reference | Форма тела и пропорции |
+| Picture 3 | Head/face reference | Лицо, глаза, губы, волосы и выражение |
 
-- **Ref2VA** — Reference-to-Audio-Video, приоритет для «этот персонаж/этот кадр → оживить».
-- **FL2VA** — First/Last-Frame-to-Audio-Video, приоритет для заданного перехода A → B.
-- **INT8 / INT4 / W4** — precision/quantization.
-- **pruned** — уменьшенный вариант.
-- **ConvRot** — конкретная community quantization/optimization ветка.
-- **offload** — часть вычислений/весов размещается за пределами VRAM.
-- **Turbo LoRA** — уменьшение количества шагов; проверять только после baseline.
+### 2.2 Сохранение идентичности
 
-## 3. Почему Ref2VA — главный кандидат
+В `retention_analysis` автор требует `fully_preserved` для Subject 1 и Picture 1 и перечисляет appearance, clothing, pose, art style, color palette и proportion.
 
-Reference conditioning соответствует visual-novel production: есть готовый anime keyframe, character references и prompt движения.
+Это разумный способ сформулировать приоритет сохранения персонажа. Но нет доказательства, что `retention_analysis` является отдельным техническим API-полем MiniMax; вероятнее, это структурированный естественный язык внутри prompt.
 
-```text
-ANIME KEYFRAME
-      +
-CHARACTER / STYLE REFERENCES
-      +
-MOTION PROMPT
-      ↓
-MINIMAX H3 REF2VA
-      ↓
-SHORT I2V CLIP
-```
+### 2.3 Таймлайн и камера
 
-Главные критерии: сохранение лица, волос, одежды, силуэта, палитры, line-art/style, фона и композиции.
-
-## 4. FL2VA
-
-Использовать там, где нужно управлять состоянием начала и конца.
-
-```text
-FRAME A → controlled transition → FRAME B
-```
-
-Проверить, даёт ли FL2VA меньше drift на переходах, чем Ref2VA.
-
-## 5. 3070 Ti 8 GB — практический выбор
-
-| Вариант | Что делать |
+| Время | Содержание |
 |---|---|
-| BF16 | Не ставить первым: слишком тяжёлый класс для 8 GB |
-| INT8 | Использовать как quality reference / контроль |
-| INT4 | Главный тест |
-| W4 / aggressive quant | Fallback при OOM / слишком большом memory footprint |
-| pruned INT4 | Очень интересный вариант для 8 GB |
-| NVFP4 | Не считать автоматически лучшим для 3070 Ti; проверять конкретную реализацию |
+| 00:00:000 | Стартовая поза на троне; камера сверху; начало движения |
+| 00:04:700 | Новая поза/выражение; поворот тела; действие с одеждой |
+| 00:07:900 | Финальная ключевая поза; изменение положения головы; сохранение harness |
 
-64 GB RAM полезны для CPU offload, но сильный offload может сделать генерацию слишком медленной. Поэтому нужно измерять и VRAM, и RAM, и время.
+Камера описана как последовательность состояний: высокий ракурс → быстрое движение вниз → low-angle.
 
-## 6. Turbo
+## 3. Почему это REF2VA
 
-Turbo LoRA — второй этап. Сначала получить quality baseline на обычном H3.
+Metadata указывает MiniMax H3, а prompt использует несколько изображений как Picture 1/2/3. В экосистеме H3 Ref2VA предназначен для reference-to-video. FL2VA используется для first/last-frame сценариев.
 
-Порядок:
+**Схема:**
 
-1. Зафиксировать input.
-2. Зафиксировать prompt.
-3. Зафиксировать resolution, frames и sampler.
-4. Получить baseline.
-5. Добавить Turbo.
-6. Сравнить скорость, identity drift и artifacts.
+`Picture 1 + Picture 2 + Picture 3 → Subject Definition → prompt/timeline → MiniMax H3 Ref2VA → video`
 
-Если скорость выигрывает без заметной потери качества — Turbo можно использовать для bulk generation.
+## 4. Компоненты локального workflow
 
-## 7. Конкуренты
+- **Diffusion model:** `minimax_h3_ref2va_pruned_int8_convrot.safetensors`
+- **Text encoder:** Qwen3-VL-32B, подходящая квантизация.
+- **Video VAE:** `minimax_h3_video_vae_fp16.safetensors`
+- **Audio VAE:** `minimax_h3_audio_vae_fp32.safetensors`
+- **ComfyUI:** интерфейс и workflow.
 
-### Wan 2.2
+Для задачи с несколькими reference images нужен именно **REF2VA/R2V workflow**, а не FL2VA.
 
-Зрелая open-source video family с I2V и широкой ComfyUI-экосистемой. Нужен как базовый контроль.
+## 5. Квантизация и VRAM
 
-### DaSiWa
+| Вариант | Примерный размер | Класс GPU | RTX 3070 Ti 8 GB |
+|---|---:|---|---|
+| INT8 ConvRot | ~20.94 GiB | 24 GB | Нет |
+| W8/W4 ConvRot | ~13.57 GiB | 16 GB | Нет/нецелесообразно |
+| W4 ConvRot | ~10.07 GiB | 12 GB | Сам по себе больше VRAM |
+| W4 ConvRot Offload | ~9.71 GiB | 8 GB + CPU offload | **Да, экспериментально** |
+| NVFP4 | ~10.86 GiB | в первую очередь RTX 50/Blackwell | Не целевой вариант |
 
-Специализированная Wan 2.2 derived/fine-tuned ветка. Её смысл для тебя — проверить, даёт ли anime-oriented tuning меньший style/identity drift. Если да, она может оказаться практичнее базового Wan на конкретных сценах.
+**Для RTX 3070 Ti:** целевой вариант — **W4 ConvRot Offload + CPU offload**.
 
-### HunyuanVideo 1.5
+Это не означает высокую скорость: часть модели будет находиться в системной RAM и обмениваться с VRAM.
 
-8.3B class, интересен как более компактная альтернатива и baseline для ограниченной памяти.
+## 6. Твой ПК
 
-## 8. Единый A/B тест
+- GPU: **RTX 3070 Ti, 8 GB VRAM** — подходит только для агрессивного W4/offload режима.
+- RAM: **64 GB** — хороший запас для экспериментов и CPU offload.
+- Reference images: начать с 1, затем перейти к 3.
+- INT8 checkpoint 20+ GiB — не подходит.
+- W4 Offload — основной кандидат.
 
-Все модели должны получить одинаковые входные условия.
-
-| Параметр | Правило |
-|---|---|
-| Input | один и тот же anime keyframe |
-| Prompt | один и тот же motion prompt |
-| Seed | фиксировать, где поддерживается |
-| Resolution | одинаковая |
-| Frames | одинаковое количество |
-| Steps | записывать |
-| Sampler | записывать |
-| VRAM peak | записывать |
-| RAM peak | записывать |
-| Generation time | записывать |
-| Identity | 0–10 |
-| Style | 0–10 |
-| Motion | 0–10 |
-| Artifacts | 0–10, где 10 = почти нет |
-| Camera control | 0–10 |
-| Overall | 0–10 |
-
-### Минимальный тестовый набор
-
-1. Поворот головы / глаза.
-2. Волосы и одежда.
-3. Full-body movement.
-4. Медленный camera push-in.
-5. Более сложное движение.
-
-## 9. Production pipeline
+## 7. Наиболее вероятный workflow автора
 
 ```text
-ILLUSTRIOUS / ANIME IMAGE
-          ↓
-      FINAL KEYFRAME
-          ↓
- CHARACTER / STYLE REFERENCE
-          ↓
-     MINIMAX H3 REF2VA
-          ↓
-     QUALITY CHECK
-          ↓
-   REGENERATE / SELECT
-          ↓
-     VIDEO UPSCALE
-          ↓
-     FINAL AVN CLIP
+Picture 1 — полный персонаж / одежда
+Picture 2 — body reference
+Picture 3 — face reference
+        ↓
+REF2VA reference conditioning
+        ↓
+<Subject 1> + structured prompt
+        ↓
+timeline + camera movement + style
+        ↓
+MiniMax H3
+        ↓
+base video
+        ↓
+неизвестный post-process / upscale
+        ↓
+опубликованный 1920×2944 MP4
 ```
 
-Главное правило: сначала зафиксировать хороший keyframe, затем использовать I2V как слой движения. Не просить одну модель одновременно менять персонажа, интерьер, композицию и движение.
+**Важно:** 1920×2944 — размер опубликованного файла. Из metadata не следует, что H3 генерировал его нативно в таком разрешении. Точный upscale pipeline неизвестен.
 
-## 10. Character consistency
+## 8. Что пока неизвестно
 
-Сделать canonical character sheet: лицо, волосы, одежда, палитра, аксессуары.
+- Точный JSON workflow автора.
+- Точный sampler/scheduler/seed/steps/CFG.
+- Точное базовое разрешение и число кадров на этапе генерации.
+- Чем сделан upscale/post-processing до 1920×2944.
+- Были ли Picture 1–3 заранее сделаны в ComfyUI, Virt-A-Mate или другом инструменте.
+- Является ли `retention_analysis` специальной технической командой MiniMax или просто структурированным prompt.
 
-Для каждой сцены:
+## 9. Практический план запуска на RTX 3070 Ti
 
-1. Получить стабильный keyframe.
-2. Передать reference, если режим его поддерживает.
-3. Описывать только необходимое движение.
-4. Проверять identity drift.
-5. Сохранять удачный кадр как следующий reference.
+1. Установить/обновить совместимый ComfyUI.
+2. Установить H3 REF2VA workflow.
+3. Взять W4 ConvRot Offload для 8 GB GPU.
+4. Настроить CPU offload.
+5. Начать с одного reference image и короткого теста.
+6. Добавить Picture 2 и Picture 3.
+7. Повторить структуру Subject Definition + retention + timeline.
+8. Только после стабильности увеличивать длительность и разрешение.
+9. Отдельно тестировать upscale/post-processing.
 
-## 11. Prompting
+**Не начинать сразу с 1920×2944.** Сначала нужно проверить стабильность идентичности и движения на небольшом базовом разрешении.
 
-Для I2V prompt должен в первую очередь описывать изменение во времени, а не повторять всю картинку.
+## 10. Reference pack для 3D-персонажей
 
-Шаблон:
+| Файл | Содержание | Цель |
+|---|---|---|
+| REF_01_FULL.png | Полный рост, фронт/3⁄4, полный костюм | Основной identity/outfit |
+| REF_02_BODY.png | Body reference | Стабильность силуэта и пропорций |
+| REF_03_FACE.png | Крупный портрет | Стабильность лица/глаз/волос |
 
-```text
-subject, action, motion intensity, facial motion, hair/clothing motion,
-camera movement, environment stability, lighting stability, temporal coherence
-```
+Для Virt-A-Mate удобно заранее получить контролируемые 3D-рендеры одного персонажа и использовать AI преимущественно для движения и камеры.
 
-Пример:
+## 11. Итог
 
-```text
-the character remains in the same place and keeps the same appearance,
-she slowly turns her head toward the camera, her hair moves subtly and naturally,
-her clothing moves slightly, the background remains stable,
-the camera performs a very slow push-in, smooth cinematic motion, consistent lighting
-```
+**RTX 3070 Ti 8 GB + 64 GB RAM → MiniMax H3 REF2VA W4 ConvRot Offload.** Это режим для экспериментов и проверки технологии, а не оптимальный production-вариант.
 
-## 12. Решение после тестов
+Если позже менять GPU, 24 GB становится значительно комфортнее для H3, а 32 GB даёт ещё больший запас. Но сначала разумно проверить качество W4 Offload на имеющейся карте.
 
-```text
-IF H3 Ref2VA INT4 fits + quality is excellent
-    → use H3 Ref2VA INT4 as primary
+## 12. Источники
 
-ELSE IF H3 W4 fits and quality is acceptable
-    → use H3 W4 as primary
+- Civitai — MiniMax H3 INT8/INT4 ConvRot, modelVersionId 3193385.
+- Civitai — DaSiWa MiniMax H3 Workflows, modelVersionId 3195699.
+- Comfy-Org / MiniMax-H3 — актуальные модели и workflow templates.
+- DmitryDB / MiniMax-H3-ComfyUI-Quants — квантизации и memory classes.
+- MiniMax — официальный анонс открытого H3.
 
-IF FL2VA is better for controlled transitions
-    → keep FL2VA as secondary
-
-IF DaSiWa has materially lower identity/style drift
-    → keep DaSiWa as specialized fallback
-
-IF Turbo quality loss is small
-    → use Turbo for bulk generation
-
-IF all H3 variants are too slow/heavy
-    → switch baseline to Wan/DaSiWa or HunyuanVideo 1.5
-```
-
-## 13. Что считать доказанным
-
-**Высокая уверенность:** Wan 2.2 имеет I2V family; HunyuanVideo 1.5 — 8.3B class с I2V/step-distilled режимами; H3 имеет разные conditioning и quantized workflows.
-
-**Требует собственного теста:** H3 Ref2VA лучше DaSiWa на твоём anime стиле; INT4 точно оптимален на конкретном workflow; Turbo лучше обычного режима; W4 будет достаточно быстрым на твоём ПК.
-
-## 14. Что скачать первым
-
-1. H3 Ref2VA INT4/pruned.
-2. H3 W4/ConvRot/offload.
-3. H3 FL2VA INT4.
-4. H3 INT8.
-5. H3 Turbo LoRA.
-6. Wan 2.2 I2V.
-7. DaSiWa.
-8. HunyuanVideo 1.5.
-
-Не скачивать всё одновременно. Сначала добиться запуска одного H3 workflow, затем сравнивать варианты.
-
-## 15. Финальная рабочая рекомендация
-
-**Основная ставка:** MiniMax H3 Ref2VA INT4.
-
-**Fallback по памяти:** H3 W4 / ConvRot / offload.
-
-**Quality reference:** H3 Ref2VA INT8.
-
-**Controlled transitions:** H3 FL2VA INT4.
-
-**Speed:** H3 Ref2VA + Turbo LoRA.
-
-**Главный конкурент:** DaSiWa / Wan 2.2.
-
-Цель — не самый красивый одиночный ролик, а стабильная production-модель, которая сможет генерировать десятки клипов одного персонажа с минимальным drift, приемлемым временем и воспроизводимым результатом.
-
-## Sources
-
-- Comfy-Org MiniMax H3: https://huggingface.co/Comfy-Org/MiniMax-H3
-- MiniMax H3: https://huggingface.co/MiniMaxAI/MiniMax-H3
-- H3 ComfyUI quantizations: https://huggingface.co/DmitryDB/MiniMax-H3-ComfyUI-Quants
-- H3 INT4 ConvRot: https://huggingface.co/Merserk/MiniMax-H3-INT4-ConvRot
-- Wan 2.2: https://github.com/Wan-Video/Wan2.2
-- HunyuanVideo 1.5: https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5
+> Данные о конкретном ролике основаны на metadata, предоставленной из Civitai API. Где точного подтверждения нет, это прямо отмечено.

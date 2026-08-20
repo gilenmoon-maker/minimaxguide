@@ -12,6 +12,7 @@ on:
       - '05-Эксперименты.md'
       - '06-Тестирование.md'
       - '07-Сверка_чатов.md'
+      - '08-Аудит_актуальности_и_план_Codex.md'
       - '.github/workflows/build-h3-pdf.yml'
   workflow_dispatch:
 
@@ -44,6 +45,7 @@ jobs:
               '05-Эксперименты.md',
               '06-Тестирование.md',
               '07-Сверка_чатов.md',
+              '08-Аудит_актуальности_и_план_Codex.md',
           ]
           out = Path('MiniMax_H3_ComfyUI_Full_Guide.md')
           parts = []
@@ -79,7 +81,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add docs/MiniMax_H3_ComfyUI_Full_Guide.pdf
-          git diff --cached --quiet || git commit -m 'Build full MiniMax H3 ComfyUI PDF'
+          git diff --cached --quiet || git commit -m 'Build audited MiniMax H3 guide PDF'
           git push
 
       - name: Upload PDF artifact
